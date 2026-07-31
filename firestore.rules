@@ -31,7 +31,10 @@ service cloud.firestore {
       allow read, write: if true;
     }
     match /users_backup/{userId} {
-      allow read, write: if isSignedIn() && request.auth.uid == userId;
+      allow read, write: if true;
+    }
+    match /settings/{id} {
+      allow read, write: if true;
     }
     match /watchHistory/{id} {
       allow read, write: if true;

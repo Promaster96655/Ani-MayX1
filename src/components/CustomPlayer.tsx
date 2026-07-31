@@ -625,6 +625,42 @@ export default function CustomPlayer({
     try {
       const progressId = `${userId}_${episode?.id}`;
       const completed = time / totalDur >= 0.92; 
+
+      // Synchronously update client-side localStorage cache for instant resume availability
+      try {
+        const localKey = `animayx_history_${userId}`;
+        const existingStr = localStorage.getItem(localKey);
+        let historyArray: any[] = [];
+        if (existingStr) {
+          historyArray = JSON.parse(existingStr);
+        }
+        const index = historyArray.findIndex((h: any) => h.episodeId === episode?.id);
+        const newEntry = {
+          id: progressId,
+          userId: userId,
+          animeId: episode?.animeId,
+          episodeId: episode?.id,
+          animeTitle: animeTitle,
+          episodeTitle: episode?.title,
+          episodeNumber: episode?.number,
+          seasonNumber: episode?.seasonNumber,
+          progress: Math.floor(time),
+          duration: Math.floor(totalDur),
+          updatedAt: new Date().toISOString(),
+          completed,
+          animeThumbnail: animeThumbnail,
+          episodeThumbnail: episode?.thumbnailUrl 
+        };
+        if (index >= 0) {
+          historyArray[index] = newEntry;
+        } else {
+          historyArray.push(newEntry);
+        }
+        localStorage.setItem(localKey, JSON.stringify(historyArray));
+      } catch (localErr) {
+        console.warn("Failed to write progress to local storage:", localErr);
+      }
+
       await setDoc(doc(db, 'watchHistory', progressId), {
         id: progressId, userId: userId, animeId: episode?.animeId, episodeId: episode?.id,
         animeTitle: animeTitle, episodeTitle: episode?.title, episodeNumber: episode?.number,

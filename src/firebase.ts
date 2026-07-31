@@ -111,11 +111,21 @@ try {
 // Initialize Firebase Core
 export const app = initializeApp(firebaseConfig);
 
-let baseDb = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
-}, firebaseConfig.firestoreDatabaseId);
+let baseDb: any;
+try {
+  baseDb = initializeFirestore(app, {
+    localCache: persistentLocalCache({
+      tabManager: persistentMultipleTabManager()
+    })
+  }, firebaseConfig.firestoreDatabaseId);
+} catch (cacheErr) {
+  console.warn("persistentLocalCache setup failed on browser/environment, falling back to standard initializeFirestore:", cacheErr);
+  try {
+    baseDb = initializeFirestore(app, {}, firebaseConfig.firestoreDatabaseId);
+  } catch (err2) {
+    baseDb = initializeFirestore(app, {});
+  }
+}
 
 export let activeDb = baseDb;
 export let db = baseDb;
@@ -138,11 +148,15 @@ export function switchToDefaultDatabase() {
   try {
     console.warn("[Firestore] Switching to default database fallback due to custom database ID mismatch/not found error...");
     const appDefault = initializeApp(firebaseConfig, 'default-db-fallback');
-    activeDb = initializeFirestore(appDefault, {
-      localCache: persistentLocalCache({
-        tabManager: persistentMultipleTabManager()
-      })
-    });
+    try {
+      activeDb = initializeFirestore(appDefault, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager()
+        })
+      });
+    } catch (e) {
+      activeDb = initializeFirestore(appDefault, {});
+    }
     db = activeDb;
     isFirestoreHealthy = true;
     try {

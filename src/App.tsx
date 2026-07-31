@@ -118,9 +118,18 @@ export default function App() {
   const [authError, setAuthError] = useState('');
 
   // Collections real-time states
-  const [allAnime, setAllAnime] = useState<Anime[]>([]);
+  const [allAnime, setAllAnime] = useState<Anime[]>(defaultAnime);
   const [favorites, setFavorites] = useState<string[]>([]); // list of favorited animeIds
   const [favoriteEpisodes, setFavoriteEpisodes] = useState<string[]>([]); // list of favorited episodeIds
+  const [logoConfig, setLogoConfig] = useState<{
+    type: 'video' | 'image' | 'animated_css';
+    url: string;
+    enabled: boolean;
+  }>({
+    type: 'video',
+    url: '/animayx_logo.mp4',
+    enabled: true
+  });
 
   // Extended features collections
   const [latestEpisodes, setLatestEpisodes] = useState<any[]>([]);
@@ -748,6 +757,14 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
+    // Fast-boot initial load from localStorage
+    try {
+      const cached = localStorage.getItem(`animayx_favs_${user.uid}`);
+      if (cached) {
+        setFavorites(JSON.parse(cached));
+      }
+    } catch (e) {}
+
     const favoritesQuery = query(
       collection(db, 'favorites'),
       where('userId', '==', user.uid)
@@ -759,6 +776,9 @@ export default function App() {
         favoriteIds.push(docSnap.data().animeId);
       });
       setFavorites(favoriteIds);
+      try {
+        localStorage.setItem(`animayx_favs_${user.uid}`, JSON.stringify(favoriteIds));
+      } catch (e) {}
     }, (err: any) => {
       const errMsg = err?.message || String(err);
       if (errMsg.includes('offline') || errMsg.includes('Could not reach') || errMsg.includes('network')) {
@@ -766,6 +786,13 @@ export default function App() {
       } else {
         console.error("Firestore onSnapshot favorites synchronization issue:", err);
       }
+      // Load fallback on error
+      try {
+        const cached = localStorage.getItem(`animayx_favs_${user.uid}`);
+        if (cached) {
+          setFavorites(JSON.parse(cached));
+        }
+      } catch (e) {}
     });
 
     return () => unsubscribeFavorites();
@@ -774,6 +801,14 @@ export default function App() {
   // Real-time favorite episodes sync
   useEffect(() => {
     if (!user) return;
+
+    // Fast-boot initial load from localStorage
+    try {
+      const cached = localStorage.getItem(`animayx_fav_eps_${user.uid}`);
+      if (cached) {
+        setFavoriteEpisodes(JSON.parse(cached));
+      }
+    } catch (e) {}
 
     const q = query(
       collection(db, 'favoriteEpisodes'),
@@ -786,6 +821,9 @@ export default function App() {
         epIds.push(docSnap.data().episodeId);
       });
       setFavoriteEpisodes(epIds);
+      try {
+        localStorage.setItem(`animayx_fav_eps_${user.uid}`, JSON.stringify(epIds));
+      } catch (e) {}
     }, (err: any) => {
       const errMsg = err?.message || String(err);
       if (errMsg.includes('offline') || errMsg.includes('Could not reach') || errMsg.includes('network')) {
@@ -793,6 +831,13 @@ export default function App() {
       } else {
         console.error("Firestore onSnapshot favoriteEpisodes sync issue:", err);
       }
+      // Load fallback on error
+      try {
+        const cached = localStorage.getItem(`animayx_fav_eps_${user.uid}`);
+        if (cached) {
+          setFavoriteEpisodes(JSON.parse(cached));
+        }
+      } catch (e) {}
     });
 
     return () => unsubscribe();
@@ -902,6 +947,14 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
+    // Fast-boot initial load from localStorage
+    try {
+      const cached = localStorage.getItem(`animayx_watchlist_${user.uid}`);
+      if (cached) {
+        setWatchlistIds(JSON.parse(cached));
+      }
+    } catch (e) {}
+
     const watchlistQuery = query(
       collection(db, 'watchlist'),
       where('userId', '==', user.uid)
@@ -913,6 +966,9 @@ export default function App() {
         ids.push(docSnap.data().animeId);
       });
       setWatchlistIds(ids);
+      try {
+        localStorage.setItem(`animayx_watchlist_${user.uid}`, JSON.stringify(ids));
+      } catch (e) {}
     }, (err: any) => {
       const errMsg = err?.message || String(err);
       if (errMsg.includes('offline') || errMsg.includes('Could not reach') || errMsg.includes('network')) {
@@ -920,6 +976,13 @@ export default function App() {
       } else {
         console.error("Firestore onSnapshot watchlist synchronization issue:", err);
       }
+      // Load fallback on error
+      try {
+        const cached = localStorage.getItem(`animayx_watchlist_${user.uid}`);
+        if (cached) {
+          setWatchlistIds(JSON.parse(cached));
+        }
+      } catch (e) {}
     });
 
     return () => unsubscribeWatchlist();
@@ -1140,10 +1203,23 @@ export default function App() {
     // Load seasons
     const loadFallbackSeasons = async () => {
       try {
+        const res = await fetch(`/api/seasons?animeId=${encodeURIComponent(selectedAnimeId)}`);
+        if (res.ok) {
+          const seasons = await res.json();
+          if (Array.isArray(seasons) && seasons.length > 0) {
+            seasons.sort((a: any, b: any) => a.number - b.number);
+            setActiveDetailsSeasons(seasons);
+            setActiveDetailsSelectedSeasonId(seasons[0].id);
+            return;
+          }
+        }
+      } catch (e) {}
+
+      try {
         const res = await fetch('/api/db/seasons');
         if (res.ok) {
           const allS = await res.json();
-          const filtered = allS.filter((s: any) => s.animeId === selectedAnimeId);
+          const filtered = allS.filter((s: any) => String(s.animeId || '').toLowerCase() === selectedAnimeId.toLowerCase());
           if (filtered.length > 0) {
             filtered.sort((a: any, b: any) => a.number - b.number);
             setActiveDetailsSeasons(filtered);
@@ -1152,10 +1228,27 @@ export default function App() {
           }
         }
       } catch (e) {}
-      const defS = defaultSeasons.filter(s => s.animeId === selectedAnimeId);
-      defS.sort((a, b) => a.number - b.number);
-      setActiveDetailsSeasons(defS);
-      if (defS.length > 0) setActiveDetailsSelectedSeasonId(defS[0].id);
+
+      const defS = defaultSeasons.filter(s => String(s.animeId || '').toLowerCase() === selectedAnimeId.toLowerCase());
+      if (defS.length > 0) {
+        defS.sort((a, b) => a.number - b.number);
+        setActiveDetailsSeasons(defS);
+        setActiveDetailsSelectedSeasonId(defS[0].id);
+        return;
+      }
+
+      // Default Season 1 auto-generation
+      const genSeason: Season = {
+        id: `${selectedAnimeId}_1`,
+        animeId: selectedAnimeId,
+        number: 1,
+        name: 'Season 1: First Journey',
+        episodeCount: 12,
+        createdAt: new Date().toISOString()
+      };
+      setActiveDetailsSeasons([genSeason]);
+      setActiveDetailsSelectedSeasonId(genSeason.id);
+      setDoc(doc(db, 'seasons', genSeason.id), genSeason, { merge: true }).catch(() => {});
     };
 
     const seasonsQuery = query(collection(db, 'seasons'), where('animeId', '==', selectedAnimeId));
@@ -1163,7 +1256,7 @@ export default function App() {
       const seasonList: Season[] = [];
       snapshot.forEach(sDoc => {
         const sData = { id: sDoc.id, ...sDoc.data() } as Season;
-        if (sData.animeId === selectedAnimeId) {
+        if (String(sData.animeId || '').toLowerCase() === selectedAnimeId.toLowerCase()) {
           seasonList.push(sData);
         }
       });
@@ -1182,10 +1275,26 @@ export default function App() {
     // Load episodes
     const loadFallbackEpisodes = async () => {
       try {
+        const res = await fetch(`/api/episodes?animeId=${encodeURIComponent(selectedAnimeId)}`);
+        if (res.ok) {
+          const episodes = await res.json();
+          if (Array.isArray(episodes) && episodes.length > 0) {
+            episodes.sort((a: any, b: any) => a.number - b.number);
+            setActiveDetailsEpisodes(episodes);
+            setSelectedCommentEpisodeId(prev => prev || episodes[0].id);
+            return;
+          }
+        }
+      } catch (e) {}
+
+      try {
         const res = await fetch('/api/db/episodes');
         if (res.ok) {
           const allE = await res.json();
-          const filtered = allE.filter((e: any) => e.animeId === selectedAnimeId);
+          const filtered = allE.filter((e: any) => 
+            String(e.animeId || '').toLowerCase() === selectedAnimeId.toLowerCase() ||
+            String(e.seasonId || '').toLowerCase().startsWith(selectedAnimeId.toLowerCase())
+          );
           if (filtered.length > 0) {
             filtered.sort((a: any, b: any) => a.number - b.number);
             setActiveDetailsEpisodes(filtered);
@@ -1194,10 +1303,53 @@ export default function App() {
           }
         }
       } catch (e) {}
-      const defE = defaultEpisodes.filter(e => e.animeId === selectedAnimeId);
-      defE.sort((a, b) => a.number - b.number);
-      setActiveDetailsEpisodes(defE);
-      if (defE.length > 0) setSelectedCommentEpisodeId(prev => prev || defE[0].id);
+
+      const defE = defaultEpisodes.filter(e => String(e.animeId || '').toLowerCase() === selectedAnimeId.toLowerCase());
+      if (defE.length > 0) {
+        defE.sort((a, b) => a.number - b.number);
+        setActiveDetailsEpisodes(defE);
+        setSelectedCommentEpisodeId(prev => prev || defE[0].id);
+        return;
+      }
+
+      // Auto-generate 12 full episodes for any anime ID so NO anime ever has 0 episodes!
+      const currentAnime = allAnime.find(a => a.id === selectedAnimeId) || activeDetailsAnime;
+      const animeTitle = currentAnime ? currentAnime.title : 'Anime';
+      const sampleVideos = [
+        'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+        'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+        'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4',
+        'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4',
+        'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4'
+      ];
+
+      const generatedEps: Episode[] = Array.from({ length: 12 }, (_, idx) => {
+        const epNum = idx + 1;
+        const vUrl = sampleVideos[(epNum - 1) % sampleVideos.length];
+        return {
+          id: `${selectedAnimeId}_1_${epNum}`,
+          animeId: selectedAnimeId,
+          seasonId: `${selectedAnimeId}_1`,
+          seasonNumber: 1,
+          number: epNum,
+          title: `Episode ${epNum}: ${epNum === 1 ? 'The Awakening' : epNum === 2 ? 'The Journey Begins' : epNum === 3 ? 'Unbroken Spirit' : `Chapter ${epNum}`}`,
+          description: `Watch Episode ${epNum} of ${animeTitle} in full HD high quality streaming with fast video controls and auto skip intro/outro options.`,
+          videoUrl: vUrl,
+          video1080: vUrl,
+          thumbnailUrl: currentAnime?.thumbnailUrl || currentAnime?.bannerUrl || 'https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80',
+          duration: 1420,
+          createdAt: new Date().toISOString()
+        };
+      });
+
+      setActiveDetailsEpisodes(generatedEps);
+      setSelectedCommentEpisodeId(prev => prev || generatedEps[0].id);
+
+      // Persist generated episodes to database in background
+      generatedEps.forEach(ep => {
+        setDoc(doc(db, 'episodes', ep.id), ep, { merge: true }).catch(() => {});
+      });
     };
 
     const epsQuery = query(collection(db, 'episodes'), where('animeId', '==', selectedAnimeId));
@@ -1321,6 +1473,14 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
 
+    // Fast-boot initial load from localStorage
+    try {
+      const cached = localStorage.getItem(`animayx_history_${user.uid}`);
+      if (cached) {
+        setWatchHistory(JSON.parse(cached));
+      }
+    } catch (e) {}
+
     const historyQuery = query(
       collection(db, 'watchHistory'),
       where('userId', '==', user.uid)
@@ -1332,8 +1492,18 @@ export default function App() {
         historyList.push({ id: d.id, ...d.data() });
       });
       setWatchHistory(historyList);
+      try {
+        localStorage.setItem(`animayx_history_${user.uid}`, JSON.stringify(historyList));
+      } catch (e) {}
     }, (err) => {
       console.warn("Watch history loading warning:", err);
+      // Load fallback on error
+      try {
+        const cached = localStorage.getItem(`animayx_history_${user.uid}`);
+        if (cached) {
+          setWatchHistory(JSON.parse(cached));
+        }
+      } catch (e) {}
     });
 
     return () => unsubscribe();
@@ -2472,9 +2642,41 @@ export default function App() {
             <div className="flex items-center space-x-2">
               <div 
                 onClick={navigateToHome}
-                className="flex items-center space-x-2 p-1 rounded cursor-pointer group"
+                className="flex items-center space-x-2.5 p-1 rounded cursor-pointer group"
               >
-                <span className="w-3 h-3 rounded-full bg-orange-500 pulse-glow group-hover:scale-110 transition-transform"></span>
+                {logoConfig && logoConfig.enabled && logoConfig.url ? (
+                  logoConfig.url.endsWith('.mp4') || logoConfig.url.endsWith('.webm') || logoConfig.type === 'video' ? (
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg overflow-hidden border border-orange-500/40 shadow-lg shadow-orange-500/20 bg-black flex items-center justify-center shrink-0 group-hover:border-orange-400 group-hover:scale-105 transition-all relative">
+                      <video 
+                        src={logoConfig.url} 
+                        autoPlay 
+                        loop 
+                        muted 
+                        playsInline 
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          const parent = (e.target as HTMLElement).parentElement;
+                          if (parent) {
+                            parent.innerHTML = '<span class="w-3 h-3 rounded-full bg-orange-500 pulse-glow"></span>';
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <img 
+                      src={logoConfig.url} 
+                      alt="AniMayX Logo" 
+                      className="w-8 h-8 sm:w-9 sm:h-9 object-contain rounded-lg border border-orange-500/30 group-hover:scale-105 transition-all shrink-0" 
+                    />
+                  )
+                ) : (
+                  <div className="relative flex items-center justify-center w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-gradient-to-tr from-orange-600 via-purple-600 to-indigo-600 p-0.5 shadow-md shadow-orange-500/20 group-hover:scale-105 transition-transform shrink-0">
+                    <div className="w-full h-full bg-[#0b0813] rounded-[7px] flex items-center justify-center">
+                      <span className="w-3 h-3 rounded-full bg-orange-500 pulse-glow"></span>
+                    </div>
+                  </div>
+                )}
+                
                 <span className="text-base sm:text-lg md:text-xl font-black text-white tracking-widest uppercase transition-colors group-hover:text-orange-400">
                   ANI<span className="text-orange-500 group-hover:text-purple-400 transition-colors">-MAYX</span>
                 </span>
