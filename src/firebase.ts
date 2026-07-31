@@ -34,6 +34,12 @@ import {
   disableNetwork,
   setLogLevel
 } from 'firebase/firestore';
+import { 
+  getStorage, 
+  ref as fbRef, 
+  uploadBytesResumable as fbUploadBytesResumable, 
+  getDownloadURL as fbGetDownloadURL 
+} from 'firebase/storage';
 import baseFirebaseConfig from '../firebase-applet-config.json';
 import { defaultAnime, defaultSeasons, defaultEpisodes } from './defaultData';
 
@@ -74,9 +80,9 @@ export function getActiveFirebaseConfig() {
   // we default to '(default)' to avoid connection errors on personal Firebase setups.
   try {
     const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-    const isSandboxEnv = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.run.app') || hostname.endsWith('.netlify.app') || hostname.endsWith('.onrender.com');
-    if (!isSandboxEnv && hostname && !metaEnv.VITE_FIREBASE_FIRESTORE_DATABASE_ID) {
-      console.log("[Firebase Config] Custom production domain detected (" + hostname + ") with no custom database ID env var. Defaulting Firestore database ID to '(default)'...");
+    const isSandboxEnv = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.run.app') || hostname.endsWith('.netlify.app') || hostname.endsWith('.onrender.com') || hostname === 'animayx.qzz.io';
+    if (!isSandboxEnv && hostname && !metaEnv.VITE_FIREBASE_FIRESTORE_DATABASE_ID && !resolved.firestoreDatabaseId) {
+      console.log("[Firebase Config] Custom production domain detected (" + hostname + ") with no custom database ID env var and no config ID. Defaulting Firestore database ID to '(default)'...");
       resolved.firestoreDatabaseId = '(default)';
     }
   } catch (err) {
@@ -837,12 +843,20 @@ export async function deleteDoc(docRef: any): Promise<void> {
 
 export function onSnapshot(queryOrCol: any, callback: (snap: any) => void, errorCallback?: (err: any) => void): () => void {
   if (!isFirestoreHealthy) {
-    getDocs(queryOrCol).then((snap) => {
-      if (snap) callback(snap);
-    }).catch(err => {
-      if (errorCallback) errorCallback(err);
-    });
-    return () => {};
+    let active = true;
+    const runFetch = () => {
+      getDocs(queryOrCol).then((snap) => {
+        if (active && snap) callback(snap);
+      }).catch(err => {
+        if (active && errorCallback) errorCallback(err);
+      });
+    };
+    runFetch();
+    const interval = setInterval(runFetch, 8000); // 8-second resolution periodic sync
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }
   try {
     const unsub = firestoreOnSnapshot(queryOrCol, (snapshot) => {
@@ -965,14 +979,46 @@ export function writeBatch(database: any) {
   };
 }
 
-// --- STORAGE STORAGE MOCK STUBS ---
-export const storage = { name: '[Firebase-Storage-Mock]' };
+// --- REAL STORAGE INITIALIZATION & MOCK FALLBACKS ---
+let realStorageInstance: any = null;
+try {
+  if (firebaseConfig && firebaseConfig.storageBucket) {
+    realStorageInstance = getStorage(app);
+  }
+} catch (storageErr) {
+  console.warn("Could not initialize real Firebase Storage:", storageErr);
+}
+
+export const storage = realStorageInstance || { name: '[Firebase-Storage-Mock]' };
 
 export function ref(storageInstance: any, pathStr: string) {
-  return { path: pathStr };
+  if (realStorageInstance && storageInstance && storageInstance !== realStorageInstance) {
+    try {
+      return fbRef(storageInstance, pathStr);
+    } catch (e) {
+      console.warn("fbRef call failed, falling back to mock:", e);
+    }
+  }
+  if (realStorageInstance && storageInstance === realStorageInstance) {
+    try {
+      return fbRef(realStorageInstance, pathStr);
+    } catch (e) {
+      console.warn("fbRef call failed, falling back to mock:", e);
+    }
+  }
+  return { path: pathStr, isMock: true };
 }
 
 export function uploadBytesResumable(storageRef: any, file: Blob | File) {
+  if (realStorageInstance && storageRef && !storageRef.isMock) {
+    try {
+      return fbUploadBytesResumable(storageRef, file);
+    } catch (e) {
+      console.warn("fbUploadBytesResumable failed, falling back to mock:", e);
+    }
+  }
+
+  // Fallback mock implementation for development/offline/unprovisioned setups
   const progressListeners: Array<(snap: any) => void> = [];
   const errorListeners: Array<(err: any) => void> = [];
   const successListeners: Array<() => void> = [];
@@ -999,6 +1045,13 @@ export function uploadBytesResumable(storageRef: any, file: Blob | File) {
 }
 
 export async function getDownloadURL(storageRef: any): Promise<string> {
+  if (realStorageInstance && storageRef && !storageRef.isMock) {
+    try {
+      return await fbGetDownloadURL(storageRef);
+    } catch (e) {
+      console.warn("fbGetDownloadURL failed, falling back to mock url:", e);
+    }
+  }
   return `https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?w=600&auto=format&fit=crop&q=80`;
 }
 
