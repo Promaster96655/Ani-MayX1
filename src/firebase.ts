@@ -69,6 +69,20 @@ export function getActiveFirebaseConfig() {
     console.warn("Failed to parse custom firebase config from localStorage:", e);
   }
 
+  // 3. Auto-detect production environment to prevent custom database ID mismatches
+  // In production (e.g. animayx.qzz.io, netlify.app), the user's personal Firebase project
+  // only has the standard '(default)' database. Using a sandbox database ID will cause connections to fail.
+  try {
+    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+    const isSandboxEnv = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.run.app');
+    if (!isSandboxEnv && hostname) {
+      console.log("[Firebase Config] Production domain detected (" + hostname + "). Forcing Firestore database ID to '(default)'...");
+      resolved.firestoreDatabaseId = '(default)';
+    }
+  } catch (err) {
+    console.error("Failed to detect environment hostname:", err);
+  }
+
   return resolved;
 }
 

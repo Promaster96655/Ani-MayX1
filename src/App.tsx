@@ -1378,13 +1378,9 @@ export default function App() {
       }
 
       console.log(`[Auth Event Log] ${modeLabel} successful.`);
-
-      if (getLocalSandboxMode()) {
-        window.location.reload();
-      }
+      setAuthLoading(false);
     } catch (err: any) {
       console.error(`[Auth Event Log] ${modeLabel} operation failure:`, err);
-      // Humanize standard Firebase exceptions
       if (err.code === 'auth/unauthorized-domain') {
         setAuthError(`This domain (${window.location.hostname}) is not authorized in your Firebase Console. Please add "${window.location.hostname}" to Authentication -> Settings -> Authorized Domains in the Firebase Console.`);
       } else if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') {
@@ -1408,7 +1404,7 @@ export default function App() {
       await signInWithPopup(auth, googleProvider);
       console.log("[Auth Event Log] Google Login successful.");
     } catch (err: any) {
-      console.error("[Auth Event Log] Google Authenticated connection login failure:", err);
+      console.error("[Auth Event Log] Google login failure:", err);
       if (err.code === 'auth/unauthorized-domain') {
         setAuthError(`This domain (${window.location.hostname}) is not authorized in your Firebase Console. Please add "${window.location.hostname}" to Authentication -> Settings -> Authorized Domains in the Firebase Console.`);
       } else {
