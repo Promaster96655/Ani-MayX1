@@ -1,0 +1,63 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Catalog & Content collections
+    match /anime/{animeId} {
+      allow read, write: if true;
+    }
+    match /seasons/{seasonId} {
+      allow read, write: if true;
+    }
+    match /episodes/{episodeId} {
+      allow read, write: if true;
+    }
+    match /videoUrlMap/{id} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    match /news/{id} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    match /schedule/{id} {
+      allow read: if true;
+      allow write: if isSignedIn();
+    }
+    match /users/{userId} {
+      allow read, write: if true;
+    }
+    match /watchHistory/{id} {
+      allow read, write: if true;
+    }
+    match /watchlist/{id} {
+      allow read, write: if true;
+    }
+    match /reviews/{id} {
+      allow read, write: if true;
+    }
+    match /comments/{id} {
+      allow read, write: if true;
+    }
+    match /favorites/{id} {
+      allow read, write: if true;
+    }
+    match /favoriteEpisodes/{id} {
+      allow read, write: if true;
+    }
+    match /adminInvites/{id} {
+      allow read, write: if true;
+    }
+    match /adminLogs/{id} {
+      allow read, write: if true;
+    }
+    match /notifications/{id} {
+      allow read, write: if true;
+    }
+    match /apiSettings/{id} {
+      allow read, write: if true;
+    }
+    match /apiUploadHistory/{id} {
+      allow read, write: if true;
+    }
+  }
+}

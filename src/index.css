@@ -1,0 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+/* Base custom styles for the dark anime experience */
+body {
+  background-color: #0b0813; /* Deep dark cosmic background */
+  color: #f1f1f3;
+  font-family: var(--font-sans);
+  overflow-x: hidden;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0d0a17;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #f97316; /* Orange hover thumb */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a855f7; /* Purple on hover */
+}
+
+/* Glassmorphism styling helper classes */
+.glass-panel {
+  background: rgba(20, 16, 35, 0.65);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(168, 85, 247, 0.15);
+}
+
+.glass-panel-heavy {
+  background: rgba(13, 10, 24, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(249, 115, 22, 0.2);
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, #f97316 0%, #a855f7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.bg-gradient-primary {
+  background: linear-gradient(135deg, #f97316 0%, #d946ef 50%, #8b5cf6 100%);
+}
+
+.shadow-neon-orange {
+  box-shadow: 0 0 15px rgba(249, 115, 22, 0.35);
+}
+
+.shadow-neon-purple {
+  box-shadow: 0 0 15px rgba(168, 85, 247, 0.35);
+}
+
+/* Loader Spin Animation Custom styles */
+.pulse-glow {
+  animation: pulse-glow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: drop-shadow(0 0 5px rgba(249, 115, 22, 0.4));
+  }
+  50% {
+    opacity: .7;
+    transform: scale(0.96);
+    filter: drop-shadow(0 0 15px rgba(168, 85, 247, 0.7));
+  }
+}

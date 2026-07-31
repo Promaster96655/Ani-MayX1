@@ -1,0 +1,10 @@
+{
+  "name": "Ani-MayX",
+  "description": "A professional, high-performance anime streaming and management platform with a dark theme, custom media player, user playlists, watch progress tracking, and a comprehensive admin controller under Ani-MayX branding.",
+  "requestFramePermissions": [
+    "fullscreen"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
