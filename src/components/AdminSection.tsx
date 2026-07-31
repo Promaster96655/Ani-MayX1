@@ -896,8 +896,9 @@ export default function AdminSection({
 
       await refreshData();
       await loadAdminData();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Save anime database details failure:", err);
+      alert(`Failed to save anime details: ${err?.message || String(err)}`);
     }
   };
 
@@ -955,7 +956,10 @@ export default function AdminSection({
       alert("Permission Denied: You do not have permission to add a season.");
       return;
     }
-    if (!selectedSeasonAnimeId) return;
+    if (!selectedSeasonAnimeId) {
+      alert("Error: Please select an anime first before adding a season.");
+      return;
+    }
 
     try {
       const seasonId = `${selectedSeasonAnimeId}_${newSeasonForm.number}`;
@@ -983,8 +987,9 @@ export default function AdminSection({
       setNewSeasonForm({ number: (activeAnimeSeasons.length + 2), name: '' });
       await refreshData();
       await loadAdminData();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Create season data failure:", err);
+      alert(`Failed to create season: ${err?.message || String(err)}`);
     }
   };
 
@@ -1022,7 +1027,10 @@ export default function AdminSection({
   // Create / Update Episodes
   const handleSaveEpisode = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEpisodeSeasonId || !selectedSeasonAnimeId) return;
+    if (!selectedEpisodeSeasonId || !selectedSeasonAnimeId) {
+      alert("Error: Please select both an Anime and a Season first before saving the episode.");
+      return;
+    }
     if (!epForm.title || !epForm.videoUrl) {
       alert("Please provide at least a title and video URL / file stream.");
       return;
@@ -1032,6 +1040,15 @@ export default function AdminSection({
       const findSeason = seasons.find(s => s.id === selectedEpisodeSeasonId);
       const sNum = findSeason ? findSeason.number : 1;
       const episodeId = isEditingEp ? isEditingEp.id : `${selectedSeasonAnimeId}_${sNum}_${epForm.number}`;
+
+      // Prevent duplicate episode uploads/numbers
+      if (!isEditingEp) {
+        const alreadyExists = episodes.some(ep => ep.id === episodeId);
+        if (alreadyExists) {
+          alert(`Error: Episode number ${epForm.number} already exists in this season. Please edit the existing episode or choose a different number.`);
+          return;
+        }
+      }
 
       // If thumbnail is empty, use anime's thumbnail as fallback
       const finalThumb = epForm.thumbnailUrl || (allAnime.find(a => a.id === selectedSeasonAnimeId)?.thumbnailUrl || '');
@@ -1077,8 +1094,10 @@ export default function AdminSection({
 
       await refreshData();
       await loadAdminData();
-    } catch (err) {
+      alert("Episode saved successfully!");
+    } catch (err: any) {
       console.error("Save episode failure:", err);
+      alert(`Failed to save episode: ${err?.message || String(err)}`);
     }
   };
 
@@ -3570,7 +3589,7 @@ export default function AdminSection({
                         <pre className="bg-zinc-900 p-4 rounded border border-zinc-800 text-zinc-200 overflow-x-auto font-mono text-[11px] leading-relaxed">
 {`import requests
 
-API_URL = "http://localhost:3000/api/admin/bulk-upload"
+API_URL = "${typeof window !== 'undefined' ? window.location.origin : 'https://animayx.qzz.io'}/api/admin/bulk-upload"
 API_KEY = "${apiKey || 'YOUR_API_KEY'}"
 
 payload = {
