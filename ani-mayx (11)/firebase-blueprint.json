@@ -1,0 +1,136 @@
+{
+  "entities": {
+    "anime": {
+      "title": "Anime",
+      "description": "An anime series catalog entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "synopsis": { "type": "string" },
+        "coverImage": { "type": "string" },
+        "bannerImage": { "type": "string" },
+        "genres": { "type": "array" },
+        "rating": { "type": "number" },
+        "episodesCount": { "type": "number" },
+        "status": { "type": "string" },
+        "type": { "type": "string" },
+        "releasedYear": { "type": "string" },
+        "duration": { "type": "string" },
+        "studio": { "type": "string" },
+        "malId": { "type": "number" },
+        "trailerUrl": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["title"]
+    },
+    "seasons": {
+      "title": "Season",
+      "description": "An anime season",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "animeId": { "type": "string" },
+        "number": { "type": "number" },
+        "title": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["animeId", "number"]
+    },
+    "episodes": {
+      "title": "Episode",
+      "description": "An episode of a season of an anime",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "animeId": { "type": "string" },
+        "seasonId": { "type": "string" },
+        "number": { "type": "number" },
+        "title": { "type": "string" },
+        "thumbnail": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "duration": { "type": "string" },
+        "introStart": { "type": "number" },
+        "introEnd": { "type": "number" },
+        "outroStart": { "type": "number" },
+        "outroEnd": { "type": "number" },
+        "skipSource": { "type": "string" },
+        "lastUpdated": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["animeId", "seasonId", "number"]
+    },
+    "users": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "role": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["uid", "email"]
+    },
+    "apiSettings": {
+      "title": "API Settings",
+      "description": "External Upload API Configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "apiKey": { "type": "string" },
+        "lastApiRequest": { "type": "string" }
+      },
+      "required": ["id", "enabled"]
+    },
+    "apiUploadHistory": {
+      "title": "API Upload History",
+      "description": "Log of automated external upload API transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uploadDate": { "type": "string" },
+        "animeId": { "type": "string" },
+        "animeTitle": { "type": "string" },
+        "seasonNumber": { "type": "number" },
+        "episodesAdded": { "type": "number" },
+        "episodesUpdated": { "type": "number" },
+        "failedCount": { "type": "number" },
+        "apiKeyMasked": { "type": "string" },
+        "status": { "type": "string" },
+        "errorLogs": { "type": "array" }
+      },
+      "required": ["id", "uploadDate", "animeId", "status"]
+    }
+  },
+  "firestore": {
+    "anime/{animeId}": {
+      "schema": "anime",
+      "description": "Anime catalog items"
+    },
+    "seasons/{seasonId}": {
+      "schema": "seasons",
+      "description": "Anime seasons"
+    },
+    "episodes/{episodeId}": {
+      "schema": "episodes",
+      "description": "Anime episodes"
+    },
+    "users/{userId}": {
+      "schema": "users",
+      "description": "Registered user accounts"
+    },
+    "apiSettings/{settingId}": {
+      "schema": "apiSettings",
+      "description": "API Configuration settings"
+    },
+    "apiUploadHistory/{historyId}": {
+      "schema": "apiUploadHistory",
+      "description": "History logs of external uploads"
+    }
+  }
+}
