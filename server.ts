@@ -9,7 +9,7 @@ import { spawnSync, spawn, exec, execFile } from 'child_process';
 import sharp from 'sharp';
 import { WebSocketServer, WebSocket } from 'ws';
 import { initializeApp as initializeFirebaseApp, getApps as getFirebaseApps } from 'firebase/app';
-import { getFirestore as getFirebaseFirestore, collection as getFirebaseCollection, getDocs as getFirebaseDocs, doc as getFirebaseDoc, setDoc as setFirebaseDoc } from 'firebase/firestore';
+import { getFirestore as getFirebaseFirestore, collection as getFirebaseCollection, getDocs as getFirebaseDocs, doc as getFirebaseDoc, setDoc as setFirebaseDoc, deleteDoc as deleteFirebaseDoc } from 'firebase/firestore';
 
 const app = express();
 
@@ -698,6 +698,43 @@ function getDatabase(): Record<string, any[]> {
   return freshDb;
 }
 
+// Background Firebase Firestore catalog synchronizers to keep cloud in sync with HTTP fallbacks
+async function syncWriteToFirestore(colName: string, docId: string, data: any) {
+  try {
+    const firebaseConfig = getFirebaseConfig();
+    if (!firebaseConfig || !firebaseConfig.projectId || !firebaseConfig.apiKey) return;
+    const apps = getFirebaseApps();
+    const firebaseApp = apps.length > 0 ? apps[0] : initializeFirebaseApp(firebaseConfig);
+    const firestoreDb = getFirebaseFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+
+    const docRef = getFirebaseDoc(firestoreDb, colName, docId);
+    
+    // Sanitize any complex or undefined values safely before writing to firestore
+    const sanitizedData = JSON.parse(JSON.stringify(data));
+    
+    await setFirebaseDoc(docRef, sanitizedData, { merge: true });
+    console.log(`[Firestore Backend Sync] Successfully synced write to ${colName}/${docId}`);
+  } catch (err: any) {
+    console.warn(`[Firestore Backend Sync] Failed to sync write to ${colName}/${docId}:`, err?.message || err);
+  }
+}
+
+async function syncDeleteFromFirestore(colName: string, docId: string) {
+  try {
+    const firebaseConfig = getFirebaseConfig();
+    if (!firebaseConfig || !firebaseConfig.projectId || !firebaseConfig.apiKey) return;
+    const apps = getFirebaseApps();
+    const firebaseApp = apps.length > 0 ? apps[0] : initializeFirebaseApp(firebaseConfig);
+    const firestoreDb = getFirebaseFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
+
+    const docRef = getFirebaseDoc(firestoreDb, colName, docId);
+    await deleteFirebaseDoc(docRef);
+    console.log(`[Firestore Backend Sync] Successfully synced delete of ${colName}/${docId}`);
+  } catch (err: any) {
+    console.warn(`[Firestore Backend Sync] Failed to sync delete of ${colName}/${docId}:`, err?.message || err);
+  }
+}
+
 // Synchronous and Asynchronous persistence handler
 async function saveDatabase(data: Record<string, any[]>) {
   serverMemoryDb = data;
@@ -809,13 +846,23 @@ async function startServer() {
     const items = dbData[colName];
     const index = items.findIndex((i: any) => i.id === docId);
 
+    const mergedData = index >= 0 
+      ? { ...items[index], ...documentData, id: docId }
+      : { ...documentData, id: docId };
+
     if (index >= 0) {
-      items[index] = { ...items[index], ...documentData, id: docId };
+      items[index] = mergedData;
     } else {
-      items.push({ ...documentData, id: docId });
+      items.push(mergedData);
     }
 
     await saveDatabase(dbData);
+    
+    // Asynchronously synchronize write back to Firebase Firestore if possible
+    syncWriteToFirestore(colName, docId, mergedData).catch(err => {
+      console.warn(`[Firestore BG Async Write Warning] Failed to schedule Firestore sync for ${colName}/${docId}:`, err);
+    });
+
     res.json({ success: true, id: docId });
   });
 
@@ -827,6 +874,12 @@ async function startServer() {
       dbData[colName] = dbData[colName].filter((i: any) => i.id !== docId);
       await saveDatabase(dbData);
     }
+
+    // Asynchronously synchronize deletion back to Firebase Firestore if possible
+    syncDeleteFromFirestore(colName, docId).catch(err => {
+      console.warn(`[Firestore BG Async Delete Warning] Failed to schedule Firestore deletion for ${colName}/${docId}:`, err);
+    });
+
     res.json({ success: true });
   });
 
