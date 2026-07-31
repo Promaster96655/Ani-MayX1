@@ -70,13 +70,13 @@ export function getActiveFirebaseConfig() {
   }
 
   // 3. Auto-detect production environment to prevent custom database ID mismatches
-  // In production (e.g. animayx.qzz.io, netlify.app), the user's personal Firebase project
-  // only has the standard '(default)' database. Using a sandbox database ID will cause connections to fail.
+  // If no custom database ID is explicitly defined in environment variables, and we are not in a sandbox, Netlify, or Render environment,
+  // we default to '(default)' to avoid connection errors on personal Firebase setups.
   try {
     const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-    const isSandboxEnv = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.run.app');
-    if (!isSandboxEnv && hostname) {
-      console.log("[Firebase Config] Production domain detected (" + hostname + "). Forcing Firestore database ID to '(default)'...");
+    const isSandboxEnv = hostname === 'localhost' || hostname === '127.0.0.1' || hostname.endsWith('.run.app') || hostname.endsWith('.netlify.app') || hostname.endsWith('.onrender.com');
+    if (!isSandboxEnv && hostname && !metaEnv.VITE_FIREBASE_FIRESTORE_DATABASE_ID) {
+      console.log("[Firebase Config] Custom production domain detected (" + hostname + ") with no custom database ID env var. Defaulting Firestore database ID to '(default)'...");
       resolved.firestoreDatabaseId = '(default)';
     }
   } catch (err) {
@@ -1029,11 +1029,13 @@ export async function syncUserBackup(userId: string) {
 
     const userData = userSnap.data();
     
-    // Query active records from Firestore for this user to create a complete user_backup document
-    const watchHistorySnap = await getDocs(query(collection(db, 'watchHistory'), where('userId', '==', userId)));
-    const watchlistSnap = await getDocs(query(collection(db, 'watchlist'), where('userId', '==', userId)));
-    const reviewsSnap = await getDocs(query(collection(db, 'reviews'), where('userId', '==', userId)));
-    const commentsSnap = await getDocs(query(collection(db, 'comments'), where('userId', '==', userId)));
+    // Query active records from Firestore for this user to create a complete user_backup document in parallel
+    const [watchHistorySnap, watchlistSnap, reviewsSnap, commentsSnap] = await Promise.all([
+      getDocs(query(collection(db, 'watchHistory'), where('userId', '==', userId))),
+      getDocs(query(collection(db, 'watchlist'), where('userId', '==', userId))),
+      getDocs(query(collection(db, 'reviews'), where('userId', '==', userId))),
+      getDocs(query(collection(db, 'comments'), where('userId', '==', userId)))
+    ]);
 
     const watchHistory = watchHistorySnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
     const watchlist = watchlistSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));

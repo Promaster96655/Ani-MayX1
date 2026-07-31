@@ -362,12 +362,54 @@ let serverMemoryDb: Record<string, any[]> | null = null;
 let lastBlobSyncTime = 0;
 let lastFirestoreSyncTime = 0;
 
+// Production-ready Firebase dynamic config builder
+function getFirebaseConfig() {
+  let resolved: any = {};
+  
+  // 1. Load from firebase-applet-config.json if it exists
+  const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+  if (fs.existsSync(configPath)) {
+    try {
+      resolved = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    } catch (err: any) {
+      console.warn("Failed to parse firebase-applet-config.json:", err.message);
+    }
+  }
+
+  // 2. Override or supplement with environment variables (for Netlify/Render dashboards)
+  const env = process.env;
+  if (env.VITE_FIREBASE_API_KEY || env.FIREBASE_API_KEY) {
+    resolved.apiKey = env.VITE_FIREBASE_API_KEY || env.FIREBASE_API_KEY;
+  }
+  if (env.VITE_FIREBASE_AUTH_DOMAIN || env.FIREBASE_AUTH_DOMAIN) {
+    resolved.authDomain = env.VITE_FIREBASE_AUTH_DOMAIN || env.FIREBASE_AUTH_DOMAIN;
+  }
+  if (env.VITE_FIREBASE_PROJECT_ID || env.FIREBASE_PROJECT_ID) {
+    resolved.projectId = env.VITE_FIREBASE_PROJECT_ID || env.FIREBASE_PROJECT_ID;
+  }
+  if (env.VITE_FIREBASE_STORAGE_BUCKET || env.FIREBASE_STORAGE_BUCKET) {
+    resolved.storageBucket = env.VITE_FIREBASE_STORAGE_BUCKET || env.FIREBASE_STORAGE_BUCKET;
+  }
+  if (env.VITE_FIREBASE_MESSAGING_SENDER_ID || env.FIREBASE_MESSAGING_SENDER_ID) {
+    resolved.messagingSenderId = env.VITE_FIREBASE_MESSAGING_SENDER_ID || env.FIREBASE_MESSAGING_SENDER_ID;
+  }
+  if (env.VITE_FIREBASE_APP_ID || env.FIREBASE_APP_ID) {
+    resolved.appId = env.VITE_FIREBASE_APP_ID || env.FIREBASE_APP_ID;
+  }
+  if (env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || env.FIREBASE_FIRESTORE_DATABASE_ID) {
+    resolved.firestoreDatabaseId = env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || env.FIREBASE_FIRESTORE_DATABASE_ID;
+  }
+
+  return resolved;
+}
+
 async function syncEpisodeToFirestore(episode: any) {
   if (!episode || !episode.id) return;
   try {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (!fs.existsSync(configPath)) return;
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    const firebaseConfig = getFirebaseConfig();
+    if (!firebaseConfig || !firebaseConfig.projectId || !firebaseConfig.apiKey) {
+      return; // Skip sync gracefully if Firebase is not configured
+    }
     const apps = getFirebaseApps();
     const firebaseApp = apps.length > 0 ? apps[0] : initializeFirebaseApp(firebaseConfig);
     const firestoreDb = getFirebaseFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
@@ -439,13 +481,11 @@ async function syncFromFirestore(force = false): Promise<void> {
   }
 
   try {
-    const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    if (!fs.existsSync(configPath)) {
-      console.warn("firebase-applet-config.json not found. Cannot sync from Firestore.");
+    const firebaseConfig = getFirebaseConfig();
+    if (!firebaseConfig || !firebaseConfig.projectId || !firebaseConfig.apiKey) {
+      console.warn("Firebase is not fully configured. Skipping Firestore catalog synchronization.");
       return;
     }
-
-    const firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
     
     const apps = getFirebaseApps();
     const firebaseApp = apps.length > 0 ? apps[0] : initializeFirebaseApp(firebaseConfig);

@@ -41,14 +41,15 @@ import {
   EyeOff,
   ExternalLink,
   Code,
-  AlertTriangle
+  AlertTriangle,
+  Megaphone
 } from 'lucide-react';
 import { 
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, LineChart, Line, 
   XAxis, YAxis, CartesianGrid, Tooltip, Legend 
 } from 'recharts';
 import { motion, AnimatePresence } from 'motion/react';
-import { db, storage, ref, uploadBytesResumable, getDownloadURL, getLocalSandboxMode, setLocalSandboxMode, seedAnimeDatabase, collection, getDocs, doc, setDoc, addDoc, updateDoc, deleteDoc, query, where, writeBatch, checkIsDefaultAdmin, getActiveFirebaseConfig } from '../firebase';
+import { db, storage, ref, uploadBytesResumable, getDownloadURL, getLocalSandboxMode, setLocalSandboxMode, seedAnimeDatabase, collection, getDocs, doc, setDoc, addDoc, updateDoc, deleteDoc, query, where, writeBatch, checkIsDefaultAdmin, getActiveFirebaseConfig, getDoc } from '../firebase';
 import { Anime, Season, Episode, UserProfile, GenreType } from '../types';
 import { storeVideoInIndexedDB } from '../lib/indexedDb';
 import BulkThumbnailUploader from './BulkThumbnailUploader';
@@ -100,7 +101,7 @@ export default function AdminSection({
   refreshData 
 }: AdminSectionProps) {
   // Tabs: 'stats', 'anime', 'seasons_episodes', 'users', 'hash_generator', 'backup_restore', 'bulk_thumbnails', 'auto_thumbnail', 'firebase_config'
-  const [activeTab, setActiveTab] = useState<'stats' | 'anime' | 'seasons_episodes' | 'users' | 'hash_generator' | 'backup_restore' | 'bulk_operations' | 'banner_manager' | 'bulk_thumbnails' | 'auto_thumbnail' | 'auto_skip_setup' | 'auto_setup_new' | 'aniskip_sync' | 'diagnostics' | 'firebase_config' | 'api_generator'>('stats');
+  const [activeTab, setActiveTab] = useState<'stats' | 'anime' | 'seasons_episodes' | 'users' | 'hash_generator' | 'backup_restore' | 'bulk_operations' | 'banner_manager' | 'bulk_thumbnails' | 'auto_thumbnail' | 'auto_skip_setup' | 'auto_setup_new' | 'aniskip_sync' | 'diagnostics' | 'firebase_config' | 'api_generator' | 'announcements'>('stats');
 
   // Stats Counters
   const [stats, setStats] = useState({
@@ -1326,7 +1327,10 @@ export default function AdminSection({
       permittedTabs.push('auto_skip_setup');
       permittedTabs.push('api_generator');
     }
-    if (hasPermission('manage_banners')) permittedTabs.push('banner_manager');
+    if (hasPermission('manage_banners')) {
+      permittedTabs.push('banner_manager');
+      permittedTabs.push('announcements');
+    }
     if (hasPermission('manage_users')) permittedTabs.push('users');
     if (hasPermission('view_analytics')) permittedTabs.push('hash_generator');
     if (hasPermission('backup_restore')) permittedTabs.push('backup_restore');
@@ -1542,6 +1546,7 @@ export default function AdminSection({
           { tab: 'auto_setup_new', label: 'Auto Setup New', Icon: Sparkles, perm: 'manage_seasons_episodes' },
           { tab: 'aniskip_sync', label: 'AniSkip Sync ⭐', Icon: FastForward, perm: 'manage_seasons_episodes' },
           { tab: 'banner_manager', label: 'Banners & News', Icon: Tv, perm: 'manage_banners' },
+          { tab: 'announcements', label: 'App Announcement 📢', Icon: Megaphone, perm: 'manage_banners' },
           { tab: 'users', label: 'User Roll Call', Icon: Users, perm: 'manage_users' },
           { tab: 'hash_generator', label: 'Advanced Hash & Slug Tool', Icon: Hash, perm: 'view_analytics' },
           { tab: 'backup_restore', label: 'Backup & Restore', Icon: Database, perm: 'backup_restore' },
@@ -2977,6 +2982,11 @@ export default function AdminSection({
           <BackupRestorePanel refreshData={refreshData} />
         )}
 
+        {/* APP ANNOUNCEMENT TAB PANEL */}
+        {activeTab === 'announcements' && (
+          <AnnouncementsPanel />
+        )}
+
         {/* BULK THUMBNAIL UPLOADER TAB PANEL */}
         {activeTab === 'bulk_thumbnails' && (
           <div className="glass-panel p-6 rounded-2xl border border-zinc-800 space-y-6 animate-fade-in text-left">
@@ -3903,6 +3913,205 @@ function bufToHex(buffer: ArrayBuffer): string {
   return Array.from(new Uint8Array(buffer))
     .map(b => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+
+// ==========================================
+// APP ANNOUNCEMENT & BROADCAST PANEL
+// ==========================================
+
+function AnnouncementsPanel() {
+  const [title, setTitle] = useState('');
+  const [message, setMessage] = useState('');
+  const [linkText, setLinkText] = useState('');
+  const [linkUrl, setLinkUrl] = useState('');
+  const [active, setActive] = useState(false);
+  const [type, setType] = useState<'info' | 'warning' | 'alert' | 'success'>('info');
+  const [isSaving, setIsSaving] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
+
+  useEffect(() => {
+    const fetchAnnouncement = async () => {
+      try {
+        const docRef = doc(db, 'settings', 'announcement');
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+          const data = snap.data();
+          setTitle(data.title || '');
+          setMessage(data.message || '');
+          setLinkText(data.linkText || '');
+          setLinkUrl(data.linkUrl || '');
+          setActive(!!data.active);
+          setType(data.type || 'info');
+        }
+      } catch (err) {
+        console.error("Error loading announcement:", err);
+      }
+    };
+    fetchAnnouncement();
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSaving(true);
+    setIsSaved(false);
+    try {
+      const docRef = doc(db, 'settings', 'announcement');
+      await setDoc(docRef, {
+        title,
+        message,
+        linkText,
+        linkUrl,
+        active,
+        type,
+        updatedAt: new Date().toISOString()
+      });
+      setIsSaved(true);
+      setTimeout(() => setIsSaved(false), 3000);
+    } catch (err: any) {
+      alert(`Failed to save announcement: ${err.message || err}`);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="glass-panel p-6 rounded-2xl border border-zinc-800 space-y-6 animate-fade-in text-left">
+      <div className="flex items-center space-x-2.5 text-orange-400 font-extrabold uppercase text-sm tracking-wider pb-2 border-b border-zinc-900">
+        <Megaphone className="w-5 h-5 animate-bounce" />
+        <span>Manage Global App Announcement Banner</span>
+      </div>
+
+      <p className="text-xs text-zinc-400 leading-relaxed font-semibold">
+        Publish an app-wide alert banner at the very top of the homepage. You can use this to broadcast server maintenance, upcoming stream additions, community events, or any important notice to all active users.
+      </p>
+
+      <form onSubmit={handleSave} className="space-y-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1.5">Announcement Title</label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Server Maintenance, Important Notice"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-850 focus:border-orange-500 rounded-lg p-2.5 text-zinc-100 text-xs font-semibold outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1.5">Banner Type Theme</label>
+            <select
+              value={type}
+              onChange={(e) => setType(e.target.value as any)}
+              className="w-full bg-zinc-950 border border-zinc-850 focus:border-orange-500 rounded-lg p-2.5 text-zinc-100 text-xs font-semibold outline-none"
+            >
+              <option value="info">Info (Blue/Zinc Accent)</option>
+              <option value="warning">Warning (Amber Alert Accent)</option>
+              <option value="alert">Alert (Red Critical Accent)</option>
+              <option value="success">Success (Emerald Green Accent)</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1.5">Announcement Message Details</label>
+          <textarea
+            rows={4}
+            required
+            placeholder="Write details or message contents for users..."
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            className="w-full bg-zinc-950 border border-zinc-850 focus:border-orange-500 rounded-lg p-3 text-zinc-200 text-xs outline-none leading-relaxed"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1.5">Call-to-Action Link Text (Optional)</label>
+            <input
+              type="text"
+              placeholder="e.g. Join Discord, Read More"
+              value={linkText}
+              onChange={(e) => setLinkText(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-850 focus:border-orange-500 rounded-lg p-2.5 text-zinc-100 text-xs font-semibold outline-none"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[10px] text-zinc-500 font-bold uppercase tracking-wider mb-1.5">Call-to-Action Link URL (Optional)</label>
+            <input
+              type="text"
+              placeholder="e.g. https://discord.gg/QNTADzYNB"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              className="w-full bg-zinc-950 border border-zinc-850 focus:border-orange-500 rounded-lg p-2.5 text-zinc-100 text-xs font-semibold outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="bg-zinc-950/40 p-4 rounded-xl border border-zinc-900 flex items-center justify-between">
+          <div className="flex flex-col text-left">
+            <span className="text-xs font-bold text-zinc-200">Enable Announcement Banner</span>
+            <span className="text-[10px] text-zinc-500 mt-0.5">Toggle whether the announcement displays instantly to all users.</span>
+          </div>
+          <input
+            type="checkbox"
+            checked={active}
+            onChange={(e) => setActive(e.target.checked)}
+            className="accent-orange-500 rounded cursor-pointer w-5 h-5"
+          />
+        </div>
+
+        {/* Live Preview Card */}
+        <div className="p-4 bg-zinc-950 border border-zinc-900 rounded-xl space-y-2">
+          <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider">Live Banner Preview:</p>
+          {active ? (
+            <div className={`p-3 rounded-lg border flex flex-col md:flex-row items-start md:items-center justify-between gap-3 text-xs leading-relaxed transition-colors ${
+              type === 'info' ? 'bg-zinc-900/60 border-zinc-800 text-zinc-200' :
+              type === 'warning' ? 'bg-amber-950/20 border-amber-900/50 text-amber-300' :
+              type === 'alert' ? 'bg-red-950/20 border-red-900/50 text-red-300' :
+              'bg-emerald-950/20 border-emerald-900/50 text-emerald-300'
+            }`}>
+              <div className="flex items-center space-x-2">
+                <span className="font-extrabold uppercase tracking-wide">{title}:</span>
+                <span className="font-medium text-zinc-350">{message}</span>
+              </div>
+              {linkText && linkUrl && (
+                <div 
+                  className={`font-black uppercase tracking-wider text-[10px] px-2.5 py-1 rounded border hover:scale-105 transition-all flex items-center gap-1 shrink-0 ${
+                    type === 'info' ? 'bg-zinc-800 border-zinc-700 text-white' :
+                    type === 'warning' ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' :
+                    type === 'alert' ? 'bg-red-500/20 border-red-500/50 text-red-300' :
+                    'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                  }`}
+                >
+                  <span>{linkText}</span>
+                  <ExternalLink className="w-3 h-3" />
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-zinc-600 italic">Banner is currently disabled.</p>
+          )}
+        </div>
+
+        <div className="flex items-center space-x-3 justify-end pt-2">
+          {isSaved && (
+            <span className="text-xs text-emerald-500 font-extrabold uppercase animate-pulse">Announcement Updated Successfully!</span>
+          )}
+          <button
+            type="submit"
+            disabled={isSaving}
+            className="bg-orange-500 hover:bg-orange-600 text-black font-black text-xs uppercase px-6 py-3 rounded-xl transition-all shadow-neon-orange select-none disabled:opacity-50 cursor-pointer"
+          >
+            {isSaving ? 'PUBLISHING...' : 'PUBLISH ANNOUNCEMENT'}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
 }
 
 
@@ -5090,20 +5299,23 @@ function BackupRestorePanel({ refreshData }: BackupRestorePanelProps) {
         if (restoreMode === 'replace') {
           setRestoreLogs(prev => [...prev, `[Scrub Mode] Purging active collections: ${Object.keys(parsedCollections).join(', ')}...`]);
           
-          for (const colName of Object.keys(parsedCollections)) {
+          const purgePromises = Object.keys(parsedCollections).map(async (colName) => {
             const snap = await getDocs(collection(db, colName));
             if (snap.size > 0) {
               setRestoreLogs(prev => [...prev, ` -> Deleting ${snap.size} entries from ${colName}...`]);
               const CHUNK_SIZE = 400;
               const allRefs = snap.docs.map(d => d.ref);
+              const colPurgePromises = [];
               for (let i = 0; i < allRefs.length; i += CHUNK_SIZE) {
                 const chunk = allRefs.slice(i, i + CHUNK_SIZE);
                 const clearBatch = writeBatch(db);
                 chunk.forEach(ref => clearBatch.delete(ref));
-                await clearBatch.commit();
+                colPurgePromises.push(clearBatch.commit());
               }
+              await Promise.all(colPurgePromises);
             }
-          }
+          });
+          await Promise.all(purgePromises);
           setRestoreLogs(prev => [...prev, "Purge of existing target collections completed."]);
         }
 
@@ -5123,6 +5335,7 @@ function BackupRestorePanel({ refreshData }: BackupRestorePanelProps) {
           const CHUNK_SIZE = 400;
           let skippedCount = 0;
           let restoredCount = 0;
+          const batchPromises = [];
 
           for (let i = 0; i < items.length; i += CHUNK_SIZE) {
             const chunk = items.slice(i, i + CHUNK_SIZE);
@@ -5169,8 +5382,12 @@ function BackupRestorePanel({ refreshData }: BackupRestorePanelProps) {
             });
 
             if (chunkHasWrite) {
-              await batch.commit();
+              batchPromises.push(batch.commit());
             }
+          }
+
+          if (batchPromises.length > 0) {
+            await Promise.all(batchPromises);
           }
 
           return { restoredCount, skippedCount };
@@ -5178,25 +5395,29 @@ function BackupRestorePanel({ refreshData }: BackupRestorePanelProps) {
 
         const activeLogs: string[] = [];
 
-        for (const col of collectionsToRestore) {
+        // Restore all collections in parallel for maximum speed
+        const activeCollectionsToRestore = collectionsToRestore.filter(col => {
           const items = parsedCollections[col.key];
-          if (items && items.length > 0) {
-            setRestoreLogs(prev => [...prev, `Importing ${items.length} records into ${col.label}...`]);
-            const resStats = await restoreCollectionChunked(col.key, items);
-            
-            if (col.key === 'anime') {
-              activeLogs.push(`Anime Restored (${resStats.restoredCount} written, ${resStats.skippedCount} skipped duplicates)`);
-            } else if (col.key === 'episodes') {
-              activeLogs.push(`Episodes Restored (${resStats.restoredCount} written, ${resStats.skippedCount} skipped duplicates)`);
-            } else if (col.key === 'users') {
-              activeLogs.push(`Users Restored (${resStats.restoredCount} written, ${resStats.skippedCount} skipped duplicates)`);
-            } else if (col.key === 'aniskipCache' || col.key === 'aniskip') {
-              activeLogs.push(`AniSkip Cache Restored (${resStats.restoredCount} written, ${resStats.skippedCount} skipped duplicates)`);
-            } else if (col.key === 'settings') {
-              activeLogs.push(`Settings Restored (${resStats.restoredCount} written, ${resStats.skippedCount} skipped duplicates)`);
-            }
+          return items && items.length > 0;
+        });
+
+        await Promise.all(activeCollectionsToRestore.map(async (col) => {
+          const items = parsedCollections[col.key];
+          setRestoreLogs(prev => [...prev, `Importing ${items.length} records into ${col.label}...`]);
+          const resStats = await restoreCollectionChunked(col.key, items);
+          
+          if (col.key === 'anime') {
+            activeLogs.push(`Anime Restored (${resStats.restoredCount} written, ${resStats.skippedCount} skipped duplicates)`);
+          } else if (col.key === 'episodes') {
+            activeLogs.push(`Episodes Restored (${resStats.restoredCount} written, ${resStats.skippedCount} skipped duplicates)`);
+          } else if (col.key === 'users') {
+            activeLogs.push(`Users Restored (${resStats.restoredCount} written, ${resStats.skippedCount} skipped duplicates)`);
+          } else if (col.key === 'aniskipCache' || col.key === 'aniskip') {
+            activeLogs.push(`AniSkip Cache Restored (${resStats.restoredCount} written, ${resStats.skippedCount} skipped duplicates)`);
+          } else if (col.key === 'settings') {
+            activeLogs.push(`Settings Restored (${resStats.restoredCount} written, ${resStats.skippedCount} skipped duplicates)`);
           }
-        }
+        }));
 
         setRestoreLogs(prev => [...prev, "Syncing system states with UI views..."]);
         await refreshData();

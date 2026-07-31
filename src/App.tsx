@@ -27,7 +27,10 @@ import {
   Tv,
   Bookmark,
   Share2,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Megaphone,
+  ExternalLink,
+  MessageSquare
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -123,6 +126,14 @@ export default function App() {
   const [latestEpisodes, setLatestEpisodes] = useState<any[]>([]);
   const [homeNews, setHomeNews] = useState<any[]>([]);
   const [homeSchedule, setHomeSchedule] = useState<any[]>([]);
+  const [announcement, setAnnouncement] = useState<{
+    title: string;
+    message: string;
+    linkText: string;
+    linkUrl: string;
+    active: boolean;
+    type: 'info' | 'warning' | 'alert' | 'success';
+  } | null>(null);
   const [watchlistIds, setWatchlistIds] = useState<string[]>([]);
 
   // Active View navigation: 'home' | 'details' | 'watch' | 'profile' | 'admin'
@@ -859,10 +870,31 @@ export default function App() {
       }
     });
 
+    // D. Subscribing to global app announcement
+    const announcementDocRef = doc(db, 'settings', 'announcement');
+    const unsubAnnouncement = onSnapshot(announcementDocRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        setAnnouncement({
+          title: data.title || '',
+          message: data.message || '',
+          linkText: data.linkText || '',
+          linkUrl: data.linkUrl || '',
+          active: !!data.active,
+          type: data.type || 'info'
+        });
+      } else {
+        setAnnouncement(null);
+      }
+    }, (err: any) => {
+      console.warn("Firestore announcement subscription issue:", err);
+    });
+
     return () => {
       unsubEps();
       unsubNews();
       unsubSched();
+      unsubAnnouncement();
     };
   }, []);
 
@@ -2399,6 +2431,38 @@ export default function App() {
   return (
     <div className="min-h-screen bg-[#0b0813] flex flex-col">
       
+      {/* Dynamic Announcement Alert Banner */}
+      {announcement && announcement.active && (
+        <div className={`py-2 px-4 text-center text-xs border-b font-semibold flex flex-col sm:flex-row items-center justify-center gap-2 transition-all select-none animate-fade-in shrink-0 relative z-50 ${
+          announcement.type === 'info' ? 'bg-indigo-950/90 border-indigo-900/60 text-indigo-200' :
+          announcement.type === 'warning' ? 'bg-amber-950/90 border-amber-900/60 text-amber-300' :
+          announcement.type === 'alert' ? 'bg-red-950/90 border-red-900/60 text-red-350' :
+          'bg-emerald-950/90 border-emerald-900/60 text-emerald-300'
+        }`}>
+          <div className="flex items-center gap-1.5 justify-center">
+            <Megaphone className="w-3.5 h-3.5 animate-pulse shrink-0" />
+            <span className="font-extrabold uppercase tracking-wider">{announcement.title}:</span>
+          </div>
+          <span className="text-zinc-300 font-medium">{announcement.message}</span>
+          {announcement.linkText && announcement.linkUrl && (
+            <a 
+              href={announcement.linkUrl} 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className={`font-black uppercase tracking-wider text-[9px] px-2 py-0.5 rounded border ml-0 sm:ml-2 hover:scale-105 transition-all flex items-center gap-1 shrink-0 ${
+                announcement.type === 'info' ? 'bg-indigo-900/40 border-indigo-750 text-white hover:bg-indigo-800/40' :
+                announcement.type === 'warning' ? 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/30' :
+                announcement.type === 'alert' ? 'bg-red-500/20 border-red-500/40 text-red-300 hover:bg-red-500/30' :
+                'bg-emerald-500/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-500/30'
+              }`}
+            >
+              <span>{announcement.linkText}</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+          )}
+        </div>
+      )}
+      
       {/* 1. Header Toolbar navigation */}
       <header className="sticky top-0 z-40 bg-[#0b0813]/95 backdrop-blur-md border-b border-purple-950/25 select-none py-3.5 px-4 md:px-8">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
@@ -3218,33 +3282,91 @@ export default function App() {
               </div>
             )}
 
-            {/* Editorial Anime Industry news */}
-            {homeNews.length > 0 && !isFilteringActive && (
-              <div className="space-y-4">
-                <h2 className="text-xl md:text-2xl font-black text-white flex items-center space-x-2.5">
-                  <Tv className="w-5 h-5 text-indigo-400 animate-pulse" />
-                  <span className="uppercase tracking-widest">ANI-MAYX EDITOR NEWS STORIES</span>
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {homeNews.map((news) => (
-                    <div 
-                      key={news.id}
-                      className="p-4 bg-zinc-950/75 border border-zinc-900 rounded-xl flex gap-4 text-left items-start cursor-pointer hover:border-indigo-500/50 transition-colors"
-                      onClick={() => {
-                        alert(`--- ${news.title} ---\n\n${news.content}\n\nPublished by: ${news.source}`);
-                      }}
-                    >
-                      <LazyImage src={news.imageUrl} alt="" className="w-20 h-20 object-cover rounded-lg border border-zinc-850" referrerPolicy="no-referrer" />
-                      <div className="space-y-1.5 justify-between flex flex-col h-20 flex-grow">
-                        <div>
-                          <h4 className="text-white text-xs font-black line-clamp-1 hover:text-indigo-400 transition-colors">{news.title}</h4>
-                          <p className="text-zinc-400 text-[10px] font-semibold mt-1 leading-relaxed line-clamp-2">{news.content}</p>
-                        </div>
-                        <p className="text-[9px] text-zinc-500 font-bold">Source: <span className="text-indigo-400 font-black">{news.source}</span></p>
-                      </div>
+            {/* Editorial Anime Industry news & Discord Sidebar Column */}
+            {!isFilteringActive && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+                
+                {/* News column */}
+                <div className="lg:col-span-8 space-y-4">
+                  <h2 className="text-xl md:text-2xl font-black text-white flex items-center space-x-2.5">
+                    <Tv className="w-5 h-5 text-indigo-400 animate-pulse" />
+                    <span className="uppercase tracking-widest">ANI-MAYX EDITOR NEWS STORIES</span>
+                  </h2>
+                  {homeNews.length === 0 ? (
+                    <div className="p-8 bg-zinc-950/40 border border-zinc-900 rounded-xl text-center">
+                      <p className="text-zinc-500 text-xs font-semibold italic">No editor stories published yet.</p>
                     </div>
-                  ))}
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {homeNews.slice(0, 4).map((news) => (
+                        <div 
+                          key={news.id}
+                          className="p-4 bg-zinc-950/75 border border-zinc-900 hover:border-indigo-500/50 rounded-xl flex gap-4 text-left items-start cursor-pointer transition-colors"
+                          onClick={() => {
+                            alert(`--- ${news.title} ---\n\n${news.content}\n\nPublished by: ${news.source}`);
+                          }}
+                        >
+                          <LazyImage src={news.imageUrl} alt="" className="w-20 h-20 object-cover rounded-lg border border-zinc-850" referrerPolicy="no-referrer" />
+                          <div className="space-y-1.5 justify-between flex flex-col h-20 flex-grow">
+                            <div>
+                              <h4 className="text-white text-xs font-black line-clamp-1 hover:text-indigo-400 transition-colors">{news.title}</h4>
+                              <p className="text-zinc-400 text-[10px] font-semibold mt-1 leading-relaxed line-clamp-2">{news.content}</p>
+                            </div>
+                            <p className="text-[9px] text-zinc-500 font-bold">Source: <span className="text-indigo-400 font-black">{news.source}</span></p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {/* Discord Sidebar Card */}
+                <div className="lg:col-span-4 space-y-4">
+                  <h2 className="text-xl md:text-2xl font-black text-white flex items-center space-x-2.5">
+                    <MessageSquare className="w-5 h-5 text-indigo-400 animate-pulse" />
+                    <span className="uppercase tracking-widest">OFFICIAL DISCORD</span>
+                  </h2>
+                  
+                  <div className="relative overflow-hidden rounded-2xl border border-indigo-500/30 bg-gradient-to-br from-[#120d24] to-[#0a0715] p-6 text-left shadow-2xl flex flex-col justify-between min-h-[220px]">
+                    {/* Glowing effect inside card */}
+                    <div className="absolute top-0 right-0 -mt-10 -mr-10 w-32 h-32 bg-indigo-500/15 rounded-full blur-2xl pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-24 h-24 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
+                    
+                    <div className="relative z-10 space-y-4">
+                      <div className="flex items-center space-x-3.5">
+                        <div className="p-2.5 bg-indigo-500/10 border border-indigo-500/30 rounded-xl text-indigo-400 shadow-inner">
+                          <svg className="w-6 h-6 fill-current" viewBox="0 0 127.14 96.36">
+                            <path d="M107.7,8.07A105.15,105.15,0,0,0,77.26,0a77.19,77.19,0,0,0-3.3,6.83A96.67,96.67,0,0,0,53.22,6.83,77.19,77.19,0,0,0,49.88,0,105.15,105.15,0,0,0,19.44,8.07C3.66,31.58-1.86,54.65,1,77.53A105.73,105.73,0,0,0,32,96.36a77.7,77.7,0,0,0,6.63-10.85,68.43,68.43,0,0,1-10.5-5c.88-.65,1.72-1.34,2.51-2a75.58,75.58,0,0,0,73,0c.79.71,1.63,1.4,2.51,2a68.43,68.43,0,0,1-10.5,5,77.7,77.7,0,0,0,6.63,10.85,105.73,105.73,0,0,0,31-18.83C129.87,50.12,123.82,27.27,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53S36.18,40.36,42.45,40.36,53.83,46,53.83,53,48.72,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.24,60,73.24,53S78.41,40.36,84.69,40.36,96.07,46,96.07,53,91,65.69,84.69,65.69Z"/>
+                          </svg>
+                        </div>
+                        <div>
+                          <h3 className="text-white font-extrabold text-sm tracking-wide">AniMayX Discord</h3>
+                          <p className="text-[10px] text-zinc-400 font-semibold flex items-center gap-1 mt-0.5">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse inline-block" />
+                            <span>Community Hub</span>
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <p className="text-zinc-300 text-xs font-semibold leading-relaxed">
+                        Join our active Discord community to chat with staff, discuss new episodes, receive notifications for latest stream releases, participate in community giveaways, and interact with other otakus!
+                      </p>
+                    </div>
+
+                    <a 
+                      href="https://discord.gg/QNTADzYNB" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="mt-5 relative z-10 w-full bg-indigo-600 hover:bg-indigo-500 hover:scale-[1.02] text-white font-black text-xs uppercase py-3 px-4 rounded-xl transition-all shadow-lg hover:shadow-indigo-500/20 text-center flex items-center justify-center space-x-2"
+                    >
+                      <svg className="w-4 h-4 fill-current" viewBox="0 0 127.14 96.36">
+                        <path d="M107.7,8.07A105.15,105.15,0,0,0,77.26,0a77.19,77.19,0,0,0-3.3,6.83A96.67,96.67,0,0,0,53.22,6.83,77.19,77.19,0,0,0,49.88,0,105.15,105.15,0,0,0,19.44,8.07C3.66,31.58-1.86,54.65,1,77.53A105.73,105.73,0,0,0,32,96.36a77.7,77.7,0,0,0,6.63-10.85,68.43,68.43,0,0,1-10.5-5c.88-.65,1.72-1.34,2.51-2a75.58,75.58,0,0,0,73,0c.79.71,1.63,1.4,2.51,2a68.43,68.43,0,0,1-10.5,5,77.7,77.7,0,0,0,6.63,10.85,105.73,105.73,0,0,0,31-18.83C129.87,50.12,123.82,27.27,107.7,8.07ZM42.45,65.69C36.18,65.69,31,60,31,53S36.18,40.36,42.45,40.36,53.83,46,53.83,53,48.72,65.69,42.45,65.69Zm42.24,0C78.41,65.69,73.24,60,73.24,53S78.41,40.36,84.69,40.36,96.07,46,96.07,53,91,65.69,84.69,65.69Z"/>
+                      </svg>
+                      <span>JOIN DISCORD SERVER</span>
+                    </a>
+                  </div>
+                </div>
+
               </div>
             )}
 
