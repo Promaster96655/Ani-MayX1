@@ -1,0 +1,12 @@
+# Netlify configuration file for AniMayX
+# Automatically detects build settings and ensures seamless single-page application routing.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Netlify routing rules are managed dynamically via the public/_redirects file.
+# Our scripts/prepare-netlify.js build helper automatically rewrites redirect destinations.

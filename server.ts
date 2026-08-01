@@ -764,6 +764,17 @@ async function saveDatabase(data: Record<string, any[]>) {
 async function startServer() {
   app.use(express.json({ limit: '50mb' }));
 
+  // Global CORS Middleware to allow cross-origin requests from Netlify frontends
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key');
+    if (req.method === 'OPTIONS') {
+      return res.sendStatus(200);
+    }
+    next();
+  });
+
   // Load the shared database right on server startup
   await ensureDatabaseLoaded();
   
@@ -813,8 +824,10 @@ async function startServer() {
           seasons.some((s: any) => String(s.id).toLowerCase() === String(e.seasonId).toLowerCase())
         );
 
-        if (episodes.length <= 2 || seasons.length === 0) {
-          const anime = (dbData.anime || []).find((a: any) => String(a.id).toLowerCase() === animeId.toLowerCase());
+        const anime = (dbData.anime || []).find((a: any) => String(a.id).toLowerCase() === animeId.toLowerCase());
+        const isMovie = anime?.type === 'Movie' || (anime?.title || '').toLowerCase().includes('your name') || (anime?.title || '').toLowerCase().includes('kimi no na wa') || (anime?.title || '').toLowerCase().includes('weathering with you') || (anime?.title || '').toLowerCase().includes('suzume') || (anime?.title || '').toLowerCase().includes('movie');
+        
+        if ((episodes.length === 0 && !isMovie) || seasons.length === 0 || (isMovie && episodes.length === 0)) {
           if (anime) {
             await autoRepairCatalog(anime.id);
             seasons = (dbData.seasons || []).filter((s: any) => String(s.animeId).toLowerCase() === animeId.toLowerCase());
@@ -1465,7 +1478,7 @@ If no MyAnimeList entry exists, return {"malId": null, "title": null}.`;
           number: 1,
           name: `${anime.title} Season 1`,
           title: `${anime.title} Season 1`,
-          episodeCount: anime.episodeCount || 12,
+          episodeCount: anime.episodeCount || (anime.type === 'Movie' || cleanTitle.includes('your name') || cleanTitle.includes('kimi no na wa') || cleanTitle.includes('weathering with you') || cleanTitle.includes('suzume') || cleanTitle.includes('movie') ? 1 : 12),
           malId: autoMal ? autoMal.malId : anime.malId,
           createdAt: new Date().toISOString()
         };
@@ -1538,8 +1551,20 @@ If no MyAnimeList entry exists, return {"malId": null, "title": null}.`;
       season.episodeCount = expectedCount;
     }
 
+    const isMovie = anime.type === 'Movie' || 
+                    season.id === 'movie_season' || 
+                    cleanTitle.includes('your name') || 
+                    cleanTitle.includes('kimi no na wa') || 
+                    cleanTitle.includes('weathering with you') || 
+                    cleanTitle.includes('suzume') || 
+                    cleanTitle.includes('movie');
+
     if (expectedCount <= 2) {
-      expectedCount = 12;
+      if (isMovie) {
+        expectedCount = 1;
+      } else {
+        expectedCount = 12;
+      }
       season.episodeCount = expectedCount;
     }
 
@@ -1549,7 +1574,7 @@ If no MyAnimeList entry exists, return {"malId": null, "title": null}.`;
 
     for (const ep of seasonEpisodes) {
       const num = ep.number;
-      if (!num || num <= 0 || seenEpNumbers.has(num)) {
+      if (!num || num <= 0 || seenEpNumbers.has(num) || num > expectedCount) {
         toDeleteIds.push(ep.id);
         removedDuplicates++;
       } else {
@@ -4332,6 +4357,55 @@ Provide output in strict JSON format.`;
   // Standard health check
   app.get('/api/health', (req, res) => {
     res.json({ status: 'healthy', mode: isProd ? 'production' : 'development', vpsPort: PORT });
+  });
+
+  // Cloudflare Integration Diagnostics Endpoint
+  app.get('/api/cloudflare/diagnostic', (req, res) => {
+    const cfRay = (req.headers['cf-ray'] as string) || null;
+    const cfConnectingIp = (req.headers['cf-connecting-ip'] as string) || null;
+    const cfIpCountry = (req.headers['cf-ipcountry'] as string) || null;
+    const cfVisitor = (req.headers['cf-visitor'] as string) || null;
+    const cdnLoop = (req.headers['cdn-loop'] as string) || null;
+    const xForwardedProto = (req.headers['x-forwarded-proto'] as string) || null;
+
+    let parsedVisitor = null;
+    if (cfVisitor) {
+      try {
+        parsedVisitor = JSON.parse(cfVisitor);
+      } catch (e) {
+        // Safe fallback
+      }
+    }
+
+    const isCloudflareProxied = !!(cfRay || cfConnectingIp || (cdnLoop && cdnLoop.includes('cloudflare')));
+
+    // Determine secure connection state
+    const protocol = parsedVisitor?.scheme || xForwardedProto || req.protocol || 'http';
+    const isSecure = protocol.toLowerCase() === 'https';
+
+    // Extract datacenter code (e.g., "7f9a8b1c4e123456-SIN" -> "SIN")
+    let cfDatacenter = null;
+    if (cfRay && cfRay.includes('-')) {
+      const parts = cfRay.split('-');
+      cfDatacenter = parts[parts.length - 1];
+    }
+
+    res.json({
+      isCloudflareProxied,
+      clientIp: cfConnectingIp || req.ip || req.socket.remoteAddress,
+      country: cfIpCountry || 'Unknown',
+      rayId: cfRay || 'N/A',
+      datacenter: cfDatacenter || 'N/A',
+      protocol: protocol.toUpperCase(),
+      isSecure,
+      headersReceived: {
+        'cf-ray': cfRay,
+        'cf-connecting-ip': cfConnectingIp,
+        'cf-ipcountry': cfIpCountry,
+        'cdn-loop': cdnLoop,
+        'x-forwarded-proto': xForwardedProto
+      }
+    });
   });
 
   if (!isProd) {

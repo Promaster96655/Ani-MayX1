@@ -1,73 +1,124 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Helper function: check if user is logged in
     function isSignedIn() {
       return request.auth != null;
     }
 
-    // Catalog & Content collections
+    // Helper function: check if user exists and has admin role, with fallback for default administrators
+    function isAdmin() {
+      return isSignedIn() && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin') ||
+        (request.auth.token.email == 'afajs1629@gmail.com' ||
+         request.auth.token.email == 'ani-mayx@gmail.com' ||
+         request.auth.token.email == 'mrzorvixofficial@gmail.com' ||
+         request.auth.token.email.matches('.*afajs1629.*') ||
+         request.auth.token.email.matches('.*ani-mayx.*') ||
+         request.auth.token.email.matches('.*mrzorvixofficial.*'))
+      );
+    }
+
+    // Helper function: check if the user is writing their own document
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Catalog & Content collections - publicly readable, editable only by Admins
     match /anime/{animeId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
     match /seasons/{seasonId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
     match /episodes/{episodeId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
     match /videoUrlMap/{id} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isAdmin();
     }
     match /news/{id} {
       allow read: if true;
-      allow write: if isSignedIn();
+      allow write: if isAdmin();
     }
     match /schedule/{id} {
       allow read: if true;
-      allow write: if isSignedIn();
-    }
-    match /users/{userId} {
-      allow read, write: if true;
-    }
-    match /users_backup/{userId} {
-      allow read, write: if true;
+      allow write: if isAdmin();
     }
     match /settings/{id} {
-      allow read, write: if true;
-    }
-    match /watchHistory/{id} {
-      allow read, write: if true;
-    }
-    match /watchlist/{id} {
-      allow read, write: if true;
-    }
-    match /reviews/{id} {
-      allow read, write: if true;
-    }
-    match /comments/{id} {
-      allow read, write: if true;
-    }
-    match /favorites/{id} {
-      allow read, write: if true;
-    }
-    match /favoriteEpisodes/{id} {
-      allow read, write: if true;
-    }
-    match /adminInvites/{id} {
-      allow read, write: if true;
-    }
-    match /adminLogs/{id} {
-      allow read, write: if true;
-    }
-    match /notifications/{id} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
     match /apiSettings/{id} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
     }
     match /apiUploadHistory/{id} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /adminInvites/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /adminLogs/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+    match /notifications/{id} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // User profiles - publicly readable, owner can write, Admins can manage
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if isOwner(userId) || isAdmin();
+    }
+
+    // User backups - only readable/writable by owner or Admin
+    match /users_backup/{userId} {
+      allow read, write: if isOwner(userId) || isAdmin();
+    }
+
+    // User Interaction & Progress tracking collections
+    match /watchHistory/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+    match /watchlist/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+    match /favorites/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+    match /favoriteEpisodes/{id} {
+      allow read: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // Public interactions - publicly readable, created by owners, updated/deleted by owner or Admin
+    match /reviews/{id} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+    match /comments/{id} {
+      allow read: if true;
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
     }
   }
 }

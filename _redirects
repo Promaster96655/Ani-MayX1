@@ -1,0 +1,6 @@
+# Netlify proxy rule to forward all server-side API requests to your live backend.
+# Replace "https://your-backend-api-url.onrender.com" with your actual Render/Railway backend URL!
+/api/*  https://your-backend-api-url.onrender.com/api/:splat  200
+
+# Fallback for React Single Page Application (SPA) routing
+/*      /index.html                                           200
